@@ -95,6 +95,8 @@ class TSPSolver:
 
     def branchAndBound( self, time_allowance=60.0 ):
         originalTable = []
+        bestPath = []
+        bssf = math.inf
 		# make the original 2 by 2 matrix
         for i in range(len(self._scenario.getCities())):
             originalRow = []
@@ -109,6 +111,43 @@ class TSPSolver:
         for i in range(len(self._scenario.getCities())):
             print(originalTable[i])
         print(lowerBound)
+
+        mylist = []
+        
+        # make childrens first group
+        
+        cities = self._scenario.getCities();
+        citiesNum = len(cities)
+        for i in range(citiesNum):
+            newList = []
+            for a in range(0,i):
+                newList.append(a)
+
+            if (i + 1) < citiesNum:
+                for b in range((i+1),citiesNum):
+                    newList.append(b)
+
+            leafNode = TreeTuples(originalTable,[i],newList,lowerBound)
+            entry = [lowerBound, leafNode]
+            heapq.heappush(mylist,entry)
+
+        #after get the first and last one
+        while len(mylist) >= 0:
+            parentNode = heapq.heappop(mylist)
+            if parentNode.getMinDist < bssf:
+                childNodes = parentNode.makeNextGeneration()
+                for i in range(len(childNodes)):
+                    # if this generation is done, no need to push
+                    if childNodes[i].isDone() :
+                        childNodes[i].finalization();
+                        if (bssf > childNodes[i].getMinDist):
+                            bestPath = childNodes[i].getPath()
+                    else:
+                        # push this generation on the queue till finish
+                        entry = [childNodes[i].getMinDist, childNodes[i]]
+                        heapq.heappush(mylist,entry)
+        
+        # by this point it should have all the generation needed
         pass
 
 
@@ -147,3 +186,100 @@ class TSPSolver:
                     table[i][j] = table[i][j] - minV
                 newLowerBound += minV
         return newLowerBound
+
+class TreeTuples:
+    def __init__(self , distM, path, unsused_cities, minD):
+        self.distMatrix  = distM
+        self.path = path
+        self.minDist = minD
+        self.unvisitedCity = unsused_cities
+        # self.cities = allCities
+        
+    
+    def getPath(self):
+        return self.path
+
+    def getDistMatrix(self):
+        return self.distMatrix
+
+    def getMinDist(self):
+        return self.minDist
+
+    def isDone(self):
+        if len(self.unvisitedCity) == 0:
+            return True
+        else:
+            return False
+
+    def makeNextGeneration (self):
+        firstGenArray  = []
+        startingIndex = self.path[-1]
+        cityNum = len(self.path) + len(self.unvisitedCity)
+        for otherIndex in self.unvisitedCity:
+            targetDist = self.distMatrix[startingIndex][otherIndex]
+            if targetDist != math.inf:
+                resultTuple = self.matrix_reduction(startingIndex,otherIndex);
+                newMinDist = resultTuple[0]
+                newMatrix = resultTuple[1]
+                # after find the first few things
+                # remove teh destIndex from unvisited
+                newUnused = []
+                for i in self.unvisitedCity:
+                    if i != otherIndex:
+                        newUnused.append(i)
+                newPath = self.path.copy().append(otherIndex)
+                newNode = TreeTuples(newMatrix,newPath, newUnused, newMinDist)
+                firstGenArray.append(newNode)
+        return firstGenArray
+                
+    def matrix_reduction(self, startingIndex, targetIndex):
+        newMinDist = self.minDist + self.distMatrix[startingIndex][targetIndex]
+        newMatrix = []
+        matrixLen = len(self.distMatrix)
+        for i in range(matrixLen):
+            newRow = self.distMatrix.copy();
+            newMatrix.append(newRow)
+
+        # after made a copy of new matrix
+        # change the col of destination to inf
+        for i in range(matrixLen):
+            newMatrix[i][targetIndex] = math.inf
+        
+        # if this is the second generation
+        # now change the [targetIndex][startingIndex] to inf
+        if len(self.path) == 1:
+            newMatrix[targetIndex][startingIndex] = math.inf
+        else:
+            # if this is not the second generation
+            # change the row of startingIndex to Inf
+            for j in range(matrixLen):
+                newMatrix[startingIndex][j] = math.inf
+            
+        # reduce
+        for i in range(matrixLen):
+            minH = min(newMatrix[i])
+            if minH != 0 and minH != math.inf:
+                for j in range(matrixLen):
+                    newMatrix[i][j] = newMatrix[i][j] - minH
+                newMinDist += minH
+        
+        for j in range(matrixLen):
+            minV = newMatrix[0][j]
+            for i in range(1,matrixLen):
+                if minV > newMatrix[i][j]:
+                    minV = newMatrix[i][j]
+            if minV != 0 and minV != math.inf:
+                for i in range(matrixLen):
+                    newMatrix[i][j] = newMatrix[i][j] - minV
+                newMinDist += minV
+
+        return [newMinDist,newMatrix]
+
+    # added the way to go back the the beginning of the path
+    def finalization(self):
+        beginningIndex = self.path[0]
+        endingIndex = self.path[-1]
+        self.minDist = self.minDist + self.distMatrix[endingIndex][beginningIndex] 
+        self.distMatrix[endingIndex][beginningIndex] = math.inf
+        self.path.append(beginningIndex)
+    
